@@ -1,0 +1,175 @@
+
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  .formula { font-family: var(--font-mono); font-size: 15px; line-height: 2.2; padding: 1rem 1.25rem; background: var(--color-background-secondary); border-radius: var(--border-radius-lg); margin-bottom: 1.5rem; }
+  .c-bid { color: #0F6E56; font-weight: 500; }
+  .c-bdim { color: #185FA5; font-weight: 500; }
+  .c-tid { color: #D85A30; font-weight: 500; }
+  .c-gdim { color: #854F0B; font-weight: 500; }
+  .c-idx { color: #534AB7; font-weight: 500; }
+  .eq { color: var(--color-text-tertiary); }
+  .section-label { font-size: 12px; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; margin: 1.5rem 0 0.5rem; font-weight: 500; }
+  .grid-row { display: flex; gap: 8px; align-items: flex-start; overflow-x: auto; padding-bottom: 4px; }
+  .block-box { border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-lg); padding: 8px; min-width: 0; flex-shrink: 0; }
+  .block-box.active { border-color: #0F6E56; background: rgba(15,110,86,0.04); }
+  .block-title { font-size: 11px; font-weight: 500; color: var(--color-text-secondary); margin-bottom: 6px; text-align: center; }
+  .block-title .bid { color: #0F6E56; }
+  .thread-row { display: flex; gap: 3px; }
+  .tcell { width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.12s; background: var(--color-background-secondary); color: var(--color-text-secondary); border: 0.5px solid transparent; }
+  .tcell:hover { border-color: var(--color-border-secondary); }
+  .tcell.sel { background: #534AB7; color: #fff; border-color: #534AB7; }
+  .arr-row { display: flex; gap: 2px; margin-top: 6px; overflow-x: auto; padding-bottom: 4px; }
+  .acell { width: 28px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; background: var(--color-background-secondary); color: var(--color-text-tertiary); border: 0.5px solid var(--color-border-tertiary); transition: all 0.12s; flex-shrink: 0; }
+  .acell.hit { background: #EEEDFE; color: #534AB7; border-color: #534AB7; font-weight: 500; }
+  .acell.stride { background: #FAEEDA; color: #854F0B; border-color: #854F0B; }
+  .breakdown { background: var(--color-background-secondary); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem; font-family: var(--font-mono); font-size: 14px; line-height: 2; margin-top: 1rem; min-height: 80px; }
+  .controls { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--color-text-secondary); margin-bottom: 1rem; flex-wrap: wrap; }
+  .legend { display: flex; gap: 14px; font-size: 11px; color: var(--color-text-secondary); margin-top: 12px; flex-wrap: wrap; }
+  .leg { display: flex; align-items: center; gap: 4px; }
+  .ldot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .stride-section { margin-top: 1rem; }
+  .stride-formula { font-family: var(--font-mono); font-size: 13px; color: var(--color-text-secondary); margin: 4px 0 8px; }
+  .toggle-btn { padding: 4px 12px; border-radius: var(--border-radius-md); font-size: 12px; cursor: pointer; background: transparent; border: 0.5px solid var(--color-border-secondary); color: var(--color-text-secondary); transition: all 0.15s; }
+  .toggle-btn.on { background: var(--color-background-info); color: var(--color-text-info); border-color: var(--color-border-info); }
+</style>
+
+<div class="formula" id="formula-top">
+  <span class="c-idx">i</span> <span class="eq">=</span> <span class="c-tid">threadIdx.x</span> <span class="eq">+</span> <span class="c-bdim">blockDim.x</span> <span class="eq">*</span> <span class="c-bid">blockIdx.x</span>
+</div>
+
+<div class="controls">
+  <label><span class="c-bdim">blockDim.x</span></label>
+  <input type="range" min="2" max="6" value="4" step="1" id="bdim" style="width:120px;" oninput="rebuild()">
+  <span id="bdim-v" style="font-weight:500;min-width:16px;">4</span>
+  <label style="margin-left:12px;"><span class="c-bid">gridDim.x</span></label>
+  <input type="range" min="2" max="4" value="3" step="1" id="gdim" style="width:120px;" oninput="rebuild()">
+  <span id="gdim-v" style="font-weight:500;min-width:16px;">3</span>
+  <button class="toggle-btn" id="stride-btn" onclick="toggleStride()">Show grid-stride loop</button>
+</div>
+
+<div class="section-label">GPU grid</div>
+<div class="grid-row" id="grid"></div>
+
+<div class="section-label">Array in memory (N = <span id="arr-n">20</span>)</div>
+<div class="arr-row" id="arr"></div>
+
+<div class="legend">
+  <span class="leg"><span class="ldot" style="background:#0F6E56;"></span><span class="c-bid">blockIdx.x</span></span>
+  <span class="leg"><span class="ldot" style="background:#185FA5;"></span><span class="c-bdim">blockDim.x</span> (threads per block)</span>
+  <span class="leg"><span class="ldot" style="background:#D85A30;"></span><span class="c-tid">threadIdx.x</span> (local thread)</span>
+  <span class="leg"><span class="ldot" style="background:#534AB7;"></span><span class="c-idx">i</span> (global index)</span>
+</div>
+
+<div class="breakdown" id="breakdown">Click any thread above</div>
+
+<div class="stride-section" id="stride-section" style="display:none;">
+  <div class="section-label">Grid-stride loop</div>
+  <div class="stride-formula" id="stride-formula"></div>
+  <div class="arr-row" id="stride-arr"></div>
+  <div style="font-size:12px;color:var(--color-text-tertiary);margin-top:6px;" id="stride-explain"></div>
+</div>
+
+<script>
+let bdim = 4, gdim = 3, sel = null, showStride = false, N = 20;
+
+function toggleStride() {
+  showStride = !showStride;
+  document.getElementById('stride-btn').classList.toggle('on', showStride);
+  document.getElementById('stride-section').style.display = showStride ? '' : 'none';
+  if (sel) updateBreakdown();
+}
+
+function rebuild() {
+  bdim = parseInt(document.getElementById('bdim').value);
+  gdim = parseInt(document.getElementById('gdim').value);
+  document.getElementById('bdim-v').textContent = bdim;
+  document.getElementById('gdim-v').textContent = gdim;
+  N = Math.max(bdim * gdim + 4, 20);
+  document.getElementById('arr-n').textContent = N;
+  sel = null;
+  render();
+  document.getElementById('breakdown').innerHTML = 'Click any thread above';
+  if (showStride) {
+    document.getElementById('stride-arr').innerHTML = '';
+    document.getElementById('stride-formula').innerHTML = '';
+    document.getElementById('stride-explain').innerHTML = '';
+  }
+}
+
+function render() {
+  const totalThreads = bdim * gdim;
+  const gridEl = document.getElementById('grid');
+  gridEl.innerHTML = '';
+  for (let b = 0; b < gdim; b++) {
+    const box = document.createElement('div');
+    box.className = 'block-box' + (sel && sel.b === b ? ' active' : '');
+    box.innerHTML = `<div class="block-title">Block <span class="bid">${b}</span></div>`;
+    const row = document.createElement('div');
+    row.className = 'thread-row';
+    for (let t = 0; t < bdim; t++) {
+      const gi = t + bdim * b;
+      const cell = document.createElement('div');
+      cell.className = 'tcell' + (sel && sel.b === b && sel.t === t ? ' sel' : '');
+      cell.textContent = gi;
+      cell.onclick = () => pick(b, t);
+      row.appendChild(cell);
+    }
+    box.appendChild(row);
+    gridEl.appendChild(box);
+  }
+
+  const arrEl = document.getElementById('arr');
+  arrEl.innerHTML = '';
+  const gi = sel ? sel.t + bdim * sel.b : -1;
+  for (let a = 0; a < N; a++) {
+    const cell = document.createElement('div');
+    cell.className = 'acell' + (a === gi ? ' hit' : '');
+    cell.textContent = a;
+    arrEl.appendChild(cell);
+  }
+}
+
+function pick(b, t) {
+  sel = { b, t };
+  render();
+  updateBreakdown();
+}
+
+function updateBreakdown() {
+  const { b, t } = sel;
+  const offset = bdim * b;
+  const gi = t + offset;
+  const stride = bdim * gdim;
+
+  document.getElementById('breakdown').innerHTML =
+    `<span class="c-idx">i</span> <span class="eq">=</span> <span class="c-tid">threadIdx.x</span> <span class="eq">+</span> <span class="c-bdim">blockDim.x</span> <span class="eq">*</span> <span class="c-bid">blockIdx.x</span><br>` +
+    `<span class="c-idx">i</span> <span class="eq">=</span> <span class="c-tid">${t}</span> <span class="eq">+</span> <span class="c-bdim">${bdim}</span> <span class="eq">*</span> <span class="c-bid">${b}</span><br>` +
+    `<span class="c-idx">i</span> <span class="eq">=</span> <span class="c-tid">${t}</span> <span class="eq">+</span> <span class="c-bid">${offset}</span> <span style="color:var(--color-text-tertiary);font-size:12px;">(skip ${b} blocks of ${bdim})</span><br>` +
+    `<span class="c-idx">i</span> <span class="eq">=</span> <span class="c-idx" style="font-size:18px;">${gi}</span>`;
+
+  if (showStride) {
+    document.getElementById('stride-formula').innerHTML =
+      `<span class="c-gdim">stride</span> <span class="eq">=</span> <span class="c-bdim">blockDim.x</span> <span class="eq">*</span> <span class="c-gdim">gridDim.x</span> <span class="eq">=</span> <span class="c-bdim">${bdim}</span> <span class="eq">*</span> <span class="c-gdim">${gdim}</span> <span class="eq">=</span> <span class="c-gdim" style="font-weight:500;">${stride}</span>`;
+
+    const hits = [];
+    for (let idx = gi; idx < N; idx += stride) hits.push(idx);
+
+    const strideArr = document.getElementById('stride-arr');
+    strideArr.innerHTML = '';
+    for (let a = 0; a < N; a++) {
+      const cell = document.createElement('div');
+      const isFirst = a === gi;
+      const isStride = !isFirst && hits.includes(a);
+      cell.className = 'acell' + (isFirst ? ' hit' : '') + (isStride ? ' stride' : '');
+      cell.textContent = a;
+      strideArr.appendChild(cell);
+    }
+
+    document.getElementById('stride-explain').innerHTML =
+      `Thread <span class="c-idx">${gi}</span> processes indices: <strong>${hits.join(', ')}</strong>` +
+      (hits.length > 1 ? ` (jumping by <span class="c-gdim">${stride}</span> each time)` : '');
+  }
+}
+
+rebuild();
+</script>
